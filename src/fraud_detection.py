@@ -1,5 +1,6 @@
 from src.utils import load_transactions
 import pandas as pd
+import numpy as np
 
 # Rule 1: High-Value Transactions Threshold
 HIGH_VALUE_THRESHOLD = 7000  # Transactions above this amount are flagged as suspicious
@@ -7,6 +8,9 @@ HIGH_VALUE_THRESHOLD = 7000  # Transactions above this amount are flagged as sus
 # Rule 3: Same-Merchant Transactions Threshold
 SAME_MERCHANT_THRESHOLD = 3       # Transactions
 SAME_MERCHANT_WINDOW_SEC = 90     # 90 seconds window
+
+# Rule 4: Unusual Time-of-Day
+STD_MULTIPLIER = 2  # Transactions outside mean ± 2*std hours are flagged
 
 def flag_high_value_transactions(csv_path: str) -> pd.DataFrame:
     """
@@ -106,6 +110,44 @@ def flag_same_merchant_transactions(csv_path: str) -> pd.DataFrame:
                 start += 1
             if (end - start + 1) >= SAME_MERCHANT_THRESHOLD:
                 flagged_indices.extend(group.iloc[start:end+1].index.tolist())
+
+    flagged = df.loc[sorted(set(flagged_indices))]
+    return flagged
+
+
+def flag_unusual_time_transactions(csv_path: str) -> pd.DataFrame:
+    """
+    Flags transactions occurring at unusual times for each user.
+
+    Parameters:
+        csv_path (str): Path to CSV with columns: user_id, timestamp, merchant_name, amount.
+
+    Returns:
+        pd.DataFrame: Transactions flagged for unusual time-of-day.
+    """
+    df = load_transactions(csv_path)
+
+    # Ensure timestamp column is datetime type
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    
+    # Extract transaction hour (0-23) as float
+    df["hour"] = df["timestamp"].dt.hour.astype(float)
+
+    flagged_indices = []
+
+    # Group by user
+    for user, group in df.groupby("user_id"):
+        hours = group["hour"]
+        if len(hours) < 2:
+            continue  # Not enough data to compute deviation
+        mean_hour = hours.mean()
+        std_hour = hours.std(ddof=0)  # use population std for consistency
+        lower = mean_hour - STD_MULTIPLIER * std_hour
+        upper = mean_hour + STD_MULTIPLIER * std_hour
+
+        # Flag transactions outside typical range
+        outlier_mask = (hours < lower) | (hours > upper)
+        flagged_indices.extend(group.index[outlier_mask].tolist())
 
     flagged = df.loc[sorted(set(flagged_indices))]
     return flagged
