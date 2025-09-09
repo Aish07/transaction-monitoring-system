@@ -200,8 +200,8 @@ def flag_transaction_spikes(csv_path: str) -> pd.DataFrame:
     return df.loc[sorted(set(flagged_indices))]
 
 
-if __name__ == "__main__":
-    # Example usage
-    flagged_transactions = flag_high_value_transactions("data/input.csv")
-    print("High-value transactions flagged:")
-    print(flagged_transactions)
+# if __name__ == "__main__":
+#     # Example usage
+#     flagged_transactions = flag_high_value_transactions("data/input.csv")
+#     print("High-value transactions flagged:")
+#     print(flagged_transactions)
