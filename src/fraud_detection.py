@@ -34,6 +34,46 @@ def flag_high_value_transactions(csv_path: str) -> pd.DataFrame:
     return flagged
 
 
+def flag_rapid_small_transactions(csv_path: str) -> pd.DataFrame:
+    """
+    Flags users who make 5 or more transactions within a 2-minute window.
+    Designed for live/continuous fraud monitoring.
+
+    Parameters:
+        csv_path (str): Path to the input CSV file.
+
+    Returns:
+        pd.DataFrame: All transactions that are part of rapid small transaction bursts.
+
+    Logic:
+        - Fixed 2-minute window for rapid detection.
+        - Threshold of 5 transactions within window triggers a flag.
+    """
+    df = load_transactions(csv_path)
+    df = df.sort_values(by=["user_id", "timestamp"])
+    
+    window_minutes = 2
+    transaction_count_threshold = 5
+    flagged_indices = []
+
+    for user, user_df in df.groupby("user_id"):
+        timestamps = user_df["timestamp"].tolist()
+        n = len(timestamps)
+        start = 0
+        
+        for end in range(n):
+            # Move start pointer forward if outside the window
+            while (timestamps[end] - timestamps[start]).total_seconds() / 60 > window_minutes:
+                start += 1
+            # Flag if window has threshold or more transactions
+            if (end - start + 1) >= transaction_count_threshold:
+                flagged_indices.extend(user_df.iloc[start:end+1].index.tolist())
+
+    flagged = df.loc[sorted(set(flagged_indices))]
+    return flagged
+
+
+
 if __name__ == "__main__":
     # Example usage
     flagged_transactions = flag_high_value_transactions("data/input.csv")
