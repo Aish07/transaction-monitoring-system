@@ -12,6 +12,12 @@ SAME_MERCHANT_WINDOW_SEC = 90     # 90 seconds window
 # Rule 4: Unusual Time-of-Day
 STD_MULTIPLIER = 2  # Transactions outside mean ± 2*std hours are flagged
 
+# Rule 5: User-Specific High-Value Transactions
+SPIKE_WINDOW_HOURS = 3          # window to check for spikes
+SPIKE_MULTIPLIER = 2            # threshold multiplier over average transactions/hour
+MIN_TX_IN_WINDOW = 3            # minimum transactions in a window to consider it a spike
+
+
 def flag_high_value_transactions(csv_path: str) -> pd.DataFrame:
     """
     Flags transactions that exceed a high-value threshold.
@@ -151,6 +157,47 @@ def flag_unusual_time_transactions(csv_path: str) -> pd.DataFrame:
 
     flagged = df.loc[sorted(set(flagged_indices))]
     return flagged
+
+
+def flag_transaction_spikes(csv_path: str) -> pd.DataFrame:
+    """
+    Flags transactions that exceed a user’s typical frequency.
+    A sliding time window (e.g., 3 hours) is used, and
+    transactions are flagged if the count in the window
+    is at least twice the user’s average transactions per hour.
+
+    Parameters:
+        csv_path (str): Path to CSV with columns: user_id, timestamp, merchant_name, amount.
+
+    Returns:
+        pd.DataFrame: Transactions flagged for unusually high frequency.
+    """
+    df = pd.read_csv(csv_path)
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    df = df.sort_values(by=["user_id", "timestamp"])
+
+    flagged_indices = []
+
+    for user, group in df.groupby("user_id"):
+        times = group["timestamp"].tolist()
+        n = len(times)
+        if n < MIN_TX_IN_WINDOW:
+            continue  # not enough data to form a spike
+
+        # compute average transactions per hour
+        total_hours = max((max(times) - min(times)).total_seconds() / 3600, 1)
+        avg_tx_per_hour = n / total_hours
+        threshold = SPIKE_MULTIPLIER * avg_tx_per_hour
+
+        start = 0
+        for end in range(n):
+            while (times[end] - times[start]).total_seconds() / 3600 > SPIKE_WINDOW_HOURS:
+                start += 1
+            window_count = end - start + 1
+            if window_count >= threshold and window_count >= MIN_TX_IN_WINDOW:
+                flagged_indices.extend(group.iloc[start:end+1].index.tolist())
+
+    return df.loc[sorted(set(flagged_indices))]
 
 
 if __name__ == "__main__":

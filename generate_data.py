@@ -1,6 +1,5 @@
 import csv
-from datetime import datetime
-import random
+from datetime import datetime, timedelta
 
 # Users and merchants
 users = [f"u{i}" for i in range(1, 9)]
@@ -10,33 +9,40 @@ merchants_travel = ["Delta Airlines", "Booking.com", "Expedia", "Airbnb", "TripA
 
 transactions = []
 
-def random_time(start_date, hour_range=(0,23)):
-    hour = random.randint(*hour_range)
-    minute = random.randint(0,59)
-    second = random.randint(0,59)
-    return datetime(start_date.year, start_date.month, start_date.day, hour, minute, second)
+def add_transaction(user, ts, merchant, amount):
+    transactions.append([user, ts.strftime("%Y-%m-%d %H:%M:%S"), merchant, amount])
 
-for user in users:
-    # Everyday purchases
-    for _ in range(4):
-        ts = random_time(datetime(2025, 1, random.randint(1,10)), hour_range=(7,20))
-        merchant = random.choice(merchants_regular)
-        amount = round(random.uniform(5, 350), 2)
-        transactions.append([user, ts.strftime("%Y-%m-%d %H:%M:%S"), merchant, amount])
-    
-    # Fraud/high-value transactions
-    if random.random() > 0.5:
-        ts = random_time(datetime(2025, 2, random.randint(10,15)), hour_range=(1,3))
-        merchant = random.choice(merchants_luxury)
-        amount = random.choice([1500, 5000, 8000, 10000, 12000])
-        transactions.append([user, ts.strftime("%Y-%m-%d %H:%M:%S"), merchant, amount])
-    
-    # Travel-related
-    for _ in range(2):
-        ts = random_time(datetime(2025, 3, random.randint(5,10)), hour_range=(8,16))
-        merchant = random.choice(merchants_travel)
-        amount = round(random.uniform(100, 800), 2)
-        transactions.append([user, ts.strftime("%Y-%m-%d %H:%M:%S"), merchant, amount])
+# ---- Rule 2: Rapid small transactions (5 tx in 2 min) ----
+base_time = datetime(2025, 1, 1, 10, 0, 0)
+for i in range(5):
+    add_transaction("u1", base_time + timedelta(seconds=i*20), "Starbucks", 10 + i)
+
+# ---- Rule 3: Same merchant multiple times in 90s ----
+base_time = datetime(2025, 1, 2, 11, 0, 0)
+for i in range(3):
+    add_transaction("u2", base_time + timedelta(seconds=i*30), "Walmart", 25)
+
+# ---- Rule 4: Unusual time-of-day ----
+# Normal hours for u3
+for h in [9, 10, 11, 12]:
+    add_transaction("u3", datetime(2025, 1, 3, h, 0, 0), "Target", 20)
+# Unusual late night transaction
+add_transaction("u3", datetime(2025, 1, 3, 3, 0, 0), "Amazon", 50)
+
+# ---- Rule 5: Time-compressed spend spike ----
+base_time = datetime(2025, 1, 4, 14, 0, 0)
+add_transaction("u4", base_time, "Subway", 100)
+add_transaction("u4", base_time + timedelta(minutes=10), "Subway", 150)
+add_transaction("u4", base_time + timedelta(minutes=20), "Starbucks", 200)  # Spike total 450 in 20min
+
+# ---- Rule 1: High-value transaction ----
+add_transaction("u5", datetime(2025, 1, 5, 15, 0, 0), "Rolex Boutique", 8000)
+
+# Fill some normal transactions for other users
+base_time = datetime(2025, 1, 6, 9, 0, 0)
+for u in ["u6", "u7", "u8"]:
+    for h in range(8, 12):
+        add_transaction(u, datetime(2025, 1, 6, h, 0, 0), "Walmart", 50)
 
 # Sort by timestamp
 transactions.sort(key=lambda x: x[1])
